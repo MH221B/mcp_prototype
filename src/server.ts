@@ -1,11 +1,52 @@
 import { randomUUID } from "node:crypto";
-import express, { type Request, type Response } from "express";
+import express, { type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
 import { auth } from "./auth.js";
 
 export const app = express();
 app.use(cors());
 app.use(express.json());
+
+declare global {
+  namespace Express {
+    interface Request {
+      userId?: string;
+    }
+  }
+}
+
+const requireApiKey = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const rawAuth = req.headers.authorization;
+  const key =
+    (req.headers["x-api-key"] as string | undefined) ??
+    (rawAuth?.startsWith("Bearer ") ? rawAuth.slice(7) : undefined);
+
+  if (!key) {
+    res.status(401).json({ error: "Missing API Key" });
+    return;
+  }
+
+  try {
+    const result = await auth.api.verifyApiKey({ body: { key } });
+    if (!result?.valid) {
+      res.status(401).json({ error: "Invalid API Key" });
+      return;
+    }
+    const userId = (result.key as { userId?: string } | null)?.userId;
+    if (!userId) {
+      res.status(401).json({ error: "API key has no associated user" });
+      return;
+    }
+    req.userId = userId;
+    next();
+  } catch {
+    res.status(500).json({ error: "Authentication verification failed" });
+  }
+};
 
 app.post("/get-api-key", async (req: Request, res: Response) => {
   try {
