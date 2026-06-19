@@ -52,3 +52,12 @@ export const createMcpServer = (candidates: Candidate[]): McpServer => {
 
   return server;
 };
+
+// "custom_tool": {
+//   "type": "remote",
+//   "url": "http://localhost:3000/mcp",
+//   "enabled": true,
+//   "headers": {
+//     "Authorization": "Bearer {API_KEY}"
+//   }
+// }
