@@ -35,11 +35,12 @@ const requireApiKey = async (
 
   try {
     const result = await auth.api.verifyApiKey({ body: { key } });
+    console.log("[requireApiKey] verify result:", JSON.stringify(result));
     if (!result?.valid) {
       res.status(401).json({ error: "Invalid API Key" });
       return;
     }
-    const userId = (result.key as { userId?: string } | null)?.userId;
+    const userId = (result.key as { referenceId?: string } | null)?.referenceId;
     if (!userId) {
       res.status(401).json({ error: "API key has no associated user" });
       return;
