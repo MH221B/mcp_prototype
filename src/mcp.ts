@@ -14,20 +14,25 @@ export const createMcpServer = (candidates: Candidate[]): McpServer => {
     version: "1.0.0",
   });
 
-  server.tool(
+  server.registerTool(
     "list_candidates",
-    "Get a list of all current job applicants and their statuses",
-    {},
+    {
+      description: "Get a list of all current job applicants and their statuses",
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
     async () => ({
       content: [{ type: "text", text: JSON.stringify(candidates, null, 2) }],
     })
   );
 
-  server.tool(
+  server.registerTool(
     "delete_candidate",
-    "Remove a candidate from the system",
     {
-      candidateNo: z.string().describe("The exact ID of the candidate, e.g. 'C-001'"),
+      description: "Remove a candidate from the system",
+      inputSchema: {
+        candidateNo: z.string().describe("The exact ID of the candidate, e.g. 'C-001'"),
+      },
+      annotations: { destructiveHint: true, idempotentHint: true, openWorldHint: false },
     },
     async ({ candidateNo }) => {
       const index = candidates.findIndex((c) => c.candidateNo === candidateNo);
