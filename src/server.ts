@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
 import express, { type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { auth } from "./auth.js";
+import { type Candidate, createMcpServer } from "./mcp.js";
 
 export const app = express();
 app.use(cors());
@@ -81,13 +84,6 @@ app.post("/get-api-key", async (req: Request, res: Response) => {
   }
 });
 
-type Candidate = {
-  candidateNo: string;
-  name: string;
-  role: string;
-  status: "applied" | "screening" | "interview" | "offer" | "rejected";
-};
-
 const candidates: Candidate[] = [
   { candidateNo: "C-001", name: "Alice Tan", role: "Backend Engineer", status: "interview" },
   { candidateNo: "C-002", name: "Budi Santoso", role: "Frontend Engineer", status: "screening" },
@@ -114,3 +110,46 @@ app.post("/candidates/delete", (req: Request, res: Response) => {
   const [removed] = candidates.splice(index, 1);
   res.json({ ok: true, removed });
 });
+
+interface Session {
+  server: McpServer;
+  transport: StreamableHTTPServerTransport;
+}
+const sessions = new Map<string, Session>();
+
+app.all("/mcp", requireApiKey, async (req: Request, res: Response) => {
+  try {
+    const sessionId = req.headers["mcp-session-id"] as string | undefined;
+    let session = sessionId ? sessions.get(sessionId) : undefined;
+
+    if (!session) {
+      const server = createMcpServer(candidates);
+      const transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => randomUUID(),
+        onsessioninitialized: (sid) => {
+          sessions.set(sid, { server, transport });
+        },
+      });
+      await server.connect(transport as unknown as Parameters<McpServer["connect"]>[0]);
+      transport.onclose = () => {
+        if (transport.sessionId) sessions.delete(transport.sessionId);
+      };
+      session = { server, transport };
+    }
+
+    await session.transport.handleRequest(req, res, req.body);
+  } catch (err) {
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+});
+
+export const shutdown = async (): Promise<void> => {
+  for (const { transport } of sessions.values()) {
+    await transport.close();
+  }
+  sessions.clear();
+};
